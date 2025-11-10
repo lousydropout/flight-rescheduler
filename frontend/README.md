@@ -1,73 +1,122 @@
-# React + TypeScript + Vite
+# Flight Rescheduler Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript frontend for the Flight Lesson Rescheduler application.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **React 19** - UI framework
+- **Vite** - Build tool and dev server
+- **TypeScript** - Type safety
+- **Tailwind CSS** - Styling
+- **shadcn/ui** - UI components
+- **Lucide React** - Icons
 
-## React Compiler
+## Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Real-time Dashboard**: Auto-refreshes every 3 seconds to show latest flight data
+- **Flight Board**: Table showing all flights with status indicators
+- **Weather Events**: Display of active weather events affecting routes
+- **Alerts Feed**: Real-time alerts for weather, cancellations, and reschedules
+- **Route Status**: Visual indicators showing which routes are clear or unsafe
+- **Simulation Clock**: Shows current simulation time from backend
+- **Manual Rescheduling**: Click on "affected" flights to open calendar modal and reschedule
+- **Action Buttons**:
+  - Seed Database
+  - Simulate Weather (Now, +1hr, +3hrs, +1 day)
+  - Fast Forward Time
+  - Cleanup/Reset
 
-## Expanding the ESLint configuration
+## Getting Started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Installation
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+bun install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Development
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+bun dev
 ```
+
+Runs on `http://localhost:5173` by default.
+
+### Build
+
+```bash
+bun run build
+```
+
+Outputs to `dist/` directory.
+
+### Environment Variables
+
+Create a `.env` file (optional):
+
+```env
+VITE_API_BASE=http://localhost:3000
+```
+
+If not set, defaults to `http://localhost:3000`.
+
+## Project Structure
+
+```
+frontend/
+├── src/
+│   ├── App.tsx              # Main dashboard component
+│   ├── main.tsx             # React entry point
+│   ├── App.css              # App-specific styles
+│   ├── index.css            # Global styles
+│   ├── components/
+│   │   └── ui/              # shadcn/ui components
+│   │       ├── button.tsx
+│   │       └── card.tsx
+│   └── lib/
+│       └── utils.ts         # Utility functions
+├── public/                  # Static assets
+└── tailwind.config.js      # Tailwind configuration
+```
+
+## Key Components
+
+### App.tsx
+
+Main dashboard component that:
+- Fetches data from backend API every 3 seconds
+- Displays flights, weather, alerts, and routes
+- Handles user interactions (rescheduling, actions)
+- Shows calendar modal for rescheduling affected flights
+
+### Status Colors
+
+- **scheduled**: Green
+- **in_progress**: Blue
+- **completed**: Purple
+- **affected**: Yellow (clickable)
+- **cancelled**: Red
+
+## API Integration
+
+The frontend communicates with the backend via REST API:
+
+- `GET /flights` - Fetch all flights
+- `GET /weather` - Fetch active weather events
+- `GET /alerts` - Fetch latest alerts
+- `GET /time` - Fetch simulation time
+- `GET /routes` - Fetch route statuses
+- `POST /seed` - Seed database
+- `POST /simulate-weather` - Create weather event
+- `POST /time/fast-forward` - Advance time
+- `POST /cleanup` - Reset simulation
+- `POST /flights/:id/available-slots` - Get available slots
+- `POST /flights/:id/reschedule` - Reschedule flight
+
+## Development Notes
+
+- Uses `fetch` API for all HTTP requests
+- Auto-refresh implemented with `setInterval` in `useEffect`
+- Modal state managed with React hooks
+- Responsive design with Tailwind CSS grid and flexbox
+- Error handling via try/catch and user alerts
