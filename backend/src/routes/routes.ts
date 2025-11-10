@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { store } from "../store";
 import { getSimulationTime } from "./time";
 
 const AVAILABLE_ROUTES = ["KAUS–KGTU", "KAUS–KHYI", "KAUS–KEDC", "KAUS–KATT"];
@@ -7,17 +7,10 @@ export function getAllRoutesWithStatus() {
   const currentTime = getSimulationTime();
   
   // Get all active weather events
-  const weatherEvents = db.query(`
-    SELECT * FROM weather_events
-    WHERE end_time > ?
-    ORDER BY start_time ASC
-  `).all(currentTime) as Array<{
-    id: number;
-    start_time: string;
-    end_time: string;
-    affected_routes: string;
-    condition: string;
-  }>;
+  const allWeatherEvents = store.getWeatherEvents();
+  const weatherEvents = allWeatherEvents
+    .filter(w => w.end_time > currentTime)
+    .sort((a, b) => a.start_time.localeCompare(b.start_time));
 
   // Check each route for active weather
   return AVAILABLE_ROUTES.map((route) => {

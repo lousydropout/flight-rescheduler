@@ -1,16 +1,21 @@
-import { db } from "../db";
+import { store } from "../store";
 
 export function cleanupSimulation() {
   // Delete all weather events
-  db.run("DELETE FROM weather_events");
+  store.clearWeatherEvents();
 
   // Reset all flights to scheduled status (preserves original times, instructors, planes)
-  db.run("UPDATE flights SET status='scheduled'");
+  const flights = store.getFlights();
+  for (const flight of flights) {
+    if (flight.status !== 'scheduled') {
+      store.updateFlight(flight.id, { status: 'scheduled' });
+    }
+  }
 
   // Add reset alert
-  db.run(
-    "INSERT INTO alerts(timestamp, message) VALUES (datetime('now'), ?)",
-    ["Simulation reset - all flights restored to scheduled status"]
+  store.addAlert(
+    new Date().toISOString(),
+    "Simulation reset - all flights restored to scheduled status"
   );
 
   return { ok: true, message: "Simulation reset" };

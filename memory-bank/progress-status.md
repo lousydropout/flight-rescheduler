@@ -2,7 +2,7 @@
 
 Last Updated: 2025-11-10
 
-## Current Phase: Phase 6 Complete ✅
+## Current Phase: Phase 6 Complete ✅ (Enhanced)
 
 ## Completed Phases
 
@@ -61,19 +61,37 @@ Last Updated: 2025-11-10
 - Enhanced alert messages with detailed information
 - Test coverage: 19 new/updated tests
 
-### Phase 6: Polish Simulation ✅
+### Phase 6: Polish Simulation ✅ (Enhanced)
 - Cleanup/reset route (`POST /cleanup`) to restore simulation state
 - Fast forward button to advance simulation time by 1 hour (`POST /time/fast-forward`)
-- Custom storm timing with datetime picker (optional `start_time` parameter)
+- **Simulation time management system:**
+  - Dedicated `simulation_time` table in SQLite storing current simulation time
+  - Background process updates time by 10 minutes every 10 seconds
+  - Fast forward updates time to next hour in database
+- **Automatic flight status progression:**
+  - Flights automatically transition: `scheduled` → `in_progress` → `completed`
+  - Status updates based on simulation time vs flight start/end times
+  - Background process updates statuses every 10 seconds
+- **Weather simulation improvements:**
+  - Replaced datetime picker with 4 relative time buttons:
+    - "Simulate Weather - Now"
+    - "Simulate Weather - In 1hr"
+    - "Simulate Weather - In 3hrs"
+    - "Simulate Weather - In 1 day"
+  - All buttons calculate time relative to current simulation time
+- **Automatic safety check:**
+  - Safety check now runs automatically after each weather simulation
+  - Flights are cancelled immediately when weather is created
+  - Response includes cancellation count
 - Route visualization with color-coded weather status (green=clear, red=unsafe)
 - Enhanced UI/UX: better loading states, button feedback, tooltips
 - Simulation time integration: all time-based operations use stored simulation time
-- Test coverage: 25 new tests (cleanup, time control, routes, custom storm timing)
+- Test coverage: 95 tests (cleanup, time control, routes, custom storm timing, flight status progression)
 
 ## Current Test Status
 
-- **Total Tests:** 81 passing
-- **Test Files:** 13 files
+- **Total Tests:** 95 passing
+- **Test Files:** 14 files
 - **Coverage:**
   - Database operations
   - Schema validation
@@ -84,8 +102,9 @@ Last Updated: 2025-11-10
   - GET endpoints
   - Full simulation loop integration
   - Cleanup/reset functionality
-  - Simulation time control (fast forward)
+  - Simulation time control (fast forward, background advancement)
   - Route status with weather
+  - Flight status progression (scheduled → in_progress → completed)
 
 ## Known Issues / Fixes Applied
 
@@ -96,7 +115,20 @@ Last Updated: 2025-11-10
    - Now fetches simulation time from backend via `GET /time`
    - Updates every 3 seconds with other data
 
-3. ⚠️ **Known Issue:** Flights table Time column may show original time instead of rescheduled time
+3. ✅ **Fixed:** Simulated time clock stopped after fast forward
+   - Implemented `simulation_time` table to persist current time
+   - Background process advances time by 10 minutes every 10 seconds
+   - Fast forward now updates database time and continues advancing
+
+4. ✅ **Fixed:** Weather alerts generated for past times
+   - Weather simulation now uses simulation time instead of real time
+   - All time-based operations consistently use stored simulation time
+
+5. ✅ **Fixed:** Flights remained "scheduled" after their end time passed
+   - Added automatic status progression: `scheduled` → `in_progress` → `completed`
+   - Background process updates statuses based on simulation time
+
+6. ⚠️ **Known Issue:** Flights table Time column may show original time instead of rescheduled time
    - Backend correctly updates `start_time` and `end_time` when rescheduling
    - Alerts correctly show new rescheduled time
    - Frontend may need to refresh or there may be a display issue
@@ -141,7 +173,7 @@ rescheduler/
 │   ├── src/
 │   │   ├── index.ts          # Main Hono app
 │   │   ├── db.ts             # Database connection
-│   │   ├── schema.ts         # Schema initialization
+│   │   ├── schema.ts         # Schema initialization (includes simulation_time table)
 │   │   └── routes/
 │   │       ├── seed.ts
 │   │       ├── weather.ts
@@ -152,7 +184,7 @@ rescheduler/
 │   │       ├── time.ts
 │   │       ├── cleanup.ts
 │   │       └── routes.ts
-│   └── tests/                # 13 test files, 81 tests
+│   └── tests/                # 14 test files, 95 tests
 └── frontend/
     ├── src/
     │   ├── App.tsx           # Main dashboard with route visualization
@@ -174,7 +206,9 @@ rescheduler/
 ### POST Endpoints
 - `POST /seed` - Seed database
 - `POST /simulate-weather` - Create weather event (optional: `start_time`, `condition`, `duration_hours`)
-- `POST /safety-check` - Cancel flights
+  - Automatically runs safety check after creating weather
+  - Returns safety check results (cancelled flight count)
+- `POST /safety-check` - Cancel flights (also runs automatically after weather simulation)
 - `POST /reschedule` - Reschedule cancelled flights
 - `POST /cleanup` - Reset simulation (clear weather, restore flights to scheduled)
 - `POST /time/fast-forward` - Advance simulation time by 1 hour

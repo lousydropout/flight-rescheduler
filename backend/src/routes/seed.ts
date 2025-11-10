@@ -1,25 +1,19 @@
-import { db } from "../db";
+import { store } from "../store";
 
 export function seedDatabase() {
-  // Clear existing data (optional - allows re-seeding)
-  db.exec("DELETE FROM flights");
-  db.exec("DELETE FROM students");
-  db.exec("DELETE FROM instructors");
-  db.exec("DELETE FROM planes");
-  db.exec("DELETE FROM alerts");
+  // Clear existing data
+  store.clearAll();
 
   // Insert 5 instructors
   const instructors = ["Cole", "Diaz", "Patel", "Kim", "Nguyen"];
-  const instructorStmt = db.prepare("INSERT INTO instructors (name) VALUES (?)");
   for (const name of instructors) {
-    instructorStmt.run(name);
+    store.addInstructor(name);
   }
 
   // Insert 5 planes
   const planes = ["N11111", "N22222", "N33333", "N44444", "N55555"];
-  const planeStmt = db.prepare("INSERT INTO planes (tail_number) VALUES (?)");
   for (const tailNumber of planes) {
-    planeStmt.run(tailNumber);
+    store.addPlane(tailNumber);
   }
 
   // Insert 20 students
@@ -49,17 +43,13 @@ export function seedDatabase() {
   const levels = ["beginner", "intermediate", "advanced"];
   const preferredTimes = ["morning", "noon", "afternoon"];
 
-  const studentStmt = db.prepare(
-    "INSERT INTO students (name, level, preferred_time) VALUES (?, ?, ?)"
-  );
-
   const studentIds: number[] = [];
   for (const name of studentNames) {
     const level = levels[Math.floor(Math.random() * levels.length)];
     const preferredTime =
       preferredTimes[Math.floor(Math.random() * preferredTimes.length)];
-    const result = studentStmt.run(name, level, preferredTime);
-    studentIds.push(Number(result.lastInsertRowid));
+    const id = store.addStudent(name, level, preferredTime);
+    studentIds.push(id);
   }
 
   // Insert ~40 flights (2 per student)
@@ -71,15 +61,8 @@ export function seedDatabase() {
     "KAUS–KGTU",
   ];
 
-  // Get instructor and plane IDs
-  const instructorIds = db
-    .query("SELECT id FROM instructors")
-    .all() as { id: number }[];
-  const planeIds = db.query("SELECT id FROM planes").all() as { id: number }[];
-
-  const flightStmt = db.prepare(
-    "INSERT INTO flights (student_id, instructor_id, plane_id, start_time, end_time, route, status) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  );
+  const instructorIds = store.getInstructors();
+  const planeIds = store.getPlanes();
 
   // Generate flights for the current week (Monday to Friday, 8 AM - 5 PM)
   const now = new Date();
@@ -112,7 +95,7 @@ export function seedDatabase() {
       const planeId = planeIds[Math.floor(Math.random() * planeIds.length)].id;
       const route = routes[Math.floor(Math.random() * routes.length)];
 
-      flightStmt.run(
+      store.addFlight(
         studentId,
         instructorId,
         planeId,
@@ -129,10 +112,7 @@ export function seedDatabase() {
 
   // Insert alert
   const alertMessage = `Seeded 20 students, 5 instructors, 40 flights.`;
-  db.run(
-    "INSERT INTO alerts (timestamp, message) VALUES (datetime('now'), ?)",
-    [alertMessage]
-  );
+  store.addAlert(new Date().toISOString(), alertMessage);
 
   return {
     students: studentIds.length,

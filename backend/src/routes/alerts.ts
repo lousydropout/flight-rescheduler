@@ -1,13 +1,7 @@
-import { db } from "../db";
+import { store } from "../store";
 
 export function getAllAlerts() {
   // Get latest 50 alerts
-  const alerts = db.query(`
-    SELECT * FROM alerts
-    ORDER BY timestamp DESC
-    LIMIT 50
-  `).all();
-  
-  return alerts;
+  return store.getAlerts(50);
 }
 

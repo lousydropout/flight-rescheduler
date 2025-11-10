@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { store } from "../store";
 import { getSimulationTime } from "./time";
 
 interface CancelledFlight {
@@ -12,36 +12,26 @@ interface CancelledFlight {
 
 // Helper function to check if a time slot is available for an instructor
 function isInstructorAvailable(instructorId: number, startTime: string, endTime: string): boolean {
-  const conflicts = db.query(`
-    SELECT COUNT(*) as count
-    FROM flights
-    WHERE instructor_id = ?
-      AND status != 'cancelled'
-      AND (
-        (start_time < ? AND end_time > ?) OR
-        (start_time < ? AND end_time > ?) OR
-        (start_time >= ? AND end_time <= ?)
-      )
-  `).get(instructorId, endTime, startTime, endTime, startTime, startTime, endTime) as { count: number };
-  
-  return conflicts.count === 0;
+  const allFlights = store.getFlights();
+  const conflicts = allFlights.filter(f =>
+    f.instructor_id === instructorId &&
+    f.status !== 'cancelled' &&
+    f.start_time < endTime &&
+    f.end_time > startTime
+  );
+  return conflicts.length === 0;
 }
 
 // Helper function to check if a time slot is available for a plane
 function isPlaneAvailable(planeId: number, startTime: string, endTime: string): boolean {
-  const conflicts = db.query(`
-    SELECT COUNT(*) as count
-    FROM flights
-    WHERE plane_id = ?
-      AND status != 'cancelled'
-      AND (
-        (start_time < ? AND end_time > ?) OR
-        (start_time < ? AND end_time > ?) OR
-        (start_time >= ? AND end_time <= ?)
-      )
-  `).get(planeId, endTime, startTime, endTime, startTime, startTime, endTime) as { count: number };
-  
-  return conflicts.count === 0;
+  const allFlights = store.getFlights();
+  const conflicts = allFlights.filter(f =>
+    f.plane_id === planeId &&
+    f.status !== 'cancelled' &&
+    f.start_time < endTime &&
+    f.end_time > startTime
+  );
+  return conflicts.length === 0;
 }
 
 // Helper function to get preferred time window hours
@@ -65,8 +55,8 @@ function findAvailableSlot(
   preferredWindow: { start: number; end: number }
 ): { startTime: Date; endTime: Date; instructorId: number; planeId: number } | null {
   // Get all instructors and planes
-  const instructors = db.query("SELECT id FROM instructors").all() as Array<{ id: number }>;
-  const planes = db.query("SELECT id FROM planes").all() as Array<{ id: number }>;
+  const instructors = store.getInstructors();
+  const planes = store.getPlanes();
 
   const earliestHour = earliestStart.getHours();
   const earliestMinute = earliestStart.getMinutes();
@@ -153,42 +143,45 @@ function findAvailableSlot(
 
 export function rescheduleFlights() {
   // Get all cancelled flights with student info
-  const cancelledFlights = db.query(`
-    SELECT 
-      f.id,
-      f.student_id,
-      f.instructor_id,
-      f.plane_id,
-      f.route,
-      s.preferred_time as student_preferred_time
-    FROM flights f
-    LEFT JOIN students s ON f.student_id = s.id
-    WHERE f.status = 'cancelled'
-    ORDER BY f.start_time ASC
-  `).all() as CancelledFlight[];
+  const allFlights = store.getFlights();
+  const students = store.getStudents();
+  const studentMap = new Map(students.map(s => [s.id, s]));
+  
+  const cancelledFlights: CancelledFlight[] = allFlights
+    .filter(f => f.status === 'cancelled')
+    .map(f => ({
+      id: f.id,
+      student_id: f.student_id,
+      instructor_id: f.instructor_id,
+      plane_id: f.plane_id,
+      route: f.route,
+      student_preferred_time: studentMap.get(f.student_id)?.preferred_time || "morning",
+    }))
+    .sort((a, b) => {
+      const flightA = allFlights.find(f => f.id === a.id);
+      const flightB = allFlights.find(f => f.id === b.id);
+      return (flightA?.start_time || "").localeCompare(flightB?.start_time || "");
+    });
 
   if (cancelledFlights.length === 0) {
-    db.run(
-      "INSERT INTO alerts(timestamp, message) VALUES (datetime('now'), ?)",
-      ["Rescheduler: No cancelled flights found"]
-    );
+    store.addAlert(new Date().toISOString(), "Rescheduler: No cancelled flights found");
     return { ok: true, rescheduled: 0 };
   }
 
   // Get latest weather event end_time to know when it's safe to reschedule
   const currentTime = getSimulationTime();
-  const latestWeather = db.query(`
-    SELECT MAX(end_time) as max_end_time
-    FROM weather_events
-    WHERE end_time > ?
-  `).get(currentTime) as { max_end_time: string | null };
+  const allWeatherEvents = store.getWeatherEvents();
+  const activeWeatherEvents = allWeatherEvents.filter(w => w.end_time > currentTime);
+  const latestWeatherEnd = activeWeatherEvents.length > 0
+    ? Math.max(...activeWeatherEvents.map(w => new Date(w.end_time).getTime()))
+    : null;
 
   // Determine earliest start time (max of weather end_time or current simulation time)
   const now = new Date(currentTime);
   let earliestStart = now;
   
-  if (latestWeather.max_end_time) {
-    const weatherEnd = new Date(latestWeather.max_end_time);
+  if (latestWeatherEnd) {
+    const weatherEnd = new Date(latestWeatherEnd);
     if (weatherEnd > now) {
       earliestStart = weatherEnd;
     }
@@ -207,26 +200,17 @@ export function rescheduleFlights() {
 
     if (slot) {
       // Update flight with new schedule
-      db.run(
-        `UPDATE flights 
-         SET start_time = ?, 
-             end_time = ?, 
-             instructor_id = ?, 
-             plane_id = ?, 
-             status = 'rescheduled'
-         WHERE id = ?`,
-        [
-          slot.startTime.toISOString(),
-          slot.endTime.toISOString(),
-          slot.instructorId,
-          slot.planeId,
-          flight.id,
-        ]
-      );
+      store.updateFlight(flight.id, {
+        start_time: slot.startTime.toISOString(),
+        end_time: slot.endTime.toISOString(),
+        instructor_id: slot.instructorId,
+        plane_id: slot.planeId,
+        status: 'scheduled'
+      });
 
       // Get instructor and plane names for alert
-      const instructor = db.query("SELECT name FROM instructors WHERE id = ?").get(slot.instructorId) as { name: string } | null;
-      const plane = db.query("SELECT tail_number FROM planes WHERE id = ?").get(slot.planeId) as { tail_number: string } | null;
+      const instructor = store.getInstructor(slot.instructorId);
+      const plane = store.getPlane(slot.planeId);
 
       const instructorName = instructor?.name || `Instructor ${slot.instructorId}`;
       const planeTail = plane?.tail_number || `Plane ${slot.planeId}`;
@@ -234,17 +218,14 @@ export function rescheduleFlights() {
 
       // Create detailed alert
       const alertMessage = `Flight ${flight.id} rescheduled to ${timeStr} (${instructorName} / ${planeTail})`;
-      db.run(
-        "INSERT INTO alerts(timestamp, message) VALUES (datetime('now'), ?)",
-        [alertMessage]
-      );
+      store.addAlert(new Date().toISOString(), alertMessage);
 
       rescheduledCount++;
     } else {
       // No available slot found
-      db.run(
-        "INSERT INTO alerts(timestamp, message) VALUES (datetime('now'), ?)",
-        [`Flight ${flight.id} could not be rescheduled - no available slots found`]
+      store.addAlert(
+        new Date().toISOString(),
+        `Flight ${flight.id} could not be rescheduled - no available slots found`
       );
       failedCount++;
     }
@@ -252,11 +233,7 @@ export function rescheduleFlights() {
 
   // Create summary alert
   const summaryMessage = `Reschedule complete: ${rescheduledCount} flights reassigned${failedCount > 0 ? `, ${failedCount} failed` : ""}`;
-  db.run(
-    "INSERT INTO alerts(timestamp, message) VALUES (datetime('now'), ?)",
-    [summaryMessage]
-  );
+  store.addAlert(new Date().toISOString(), summaryMessage);
 
   return { ok: true, rescheduled: rescheduledCount, failed: failedCount };
 }
-

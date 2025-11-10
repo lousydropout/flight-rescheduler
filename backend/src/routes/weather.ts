@@ -1,5 +1,6 @@
-import { db } from "../db";
+import { store } from "../store";
 import { getSimulationTime } from "./time";
+import { safetyCheck } from "./safety";
 
 const AVAILABLE_ROUTES = ["KAUS–KGTU", "KAUS–KHYI", "KAUS–KEDC", "KAUS–KATT"];
 
@@ -16,30 +17,37 @@ export function simulateWeather(condition: string = "storm", durationHours: numb
   const endTime = new Date(startTime.getTime() + durationHours * 60 * 60 * 1000);
 
   // Insert weather event
-  db.run(
-    "INSERT INTO weather_events(start_time, end_time, affected_routes, condition) VALUES (?, ?, ?, ?)",
-    [startTime.toISOString(), endTime.toISOString(), affectedRoutes, condition]
+  store.addWeatherEvent(
+    startTime.toISOString(),
+    endTime.toISOString(),
+    affectedRoutes,
+    condition
   );
 
   // Create detailed alert using simulation time
   const alertMessage = `Simulated ${condition} (${durationHours}h) affecting ${affectedRoutes}`;
-  db.run(
-    "INSERT INTO alerts(timestamp, message) VALUES (?, ?)",
-    [currentSimTime, alertMessage]
-  );
+  store.addAlert(currentSimTime, alertMessage);
 
-  return { ok: true, condition, duration_hours: durationHours, affected_routes: affectedRoutes };
+  // Automatically run safety check after creating weather event
+  const safetyResult = safetyCheck();
+
+  return { 
+    ok: true, 
+    condition, 
+    duration_hours: durationHours, 
+    affected_routes: affectedRoutes,
+    safety_check: {
+      cancelled: safetyResult.cancelled
+    }
+  };
 }
 
 export function getAllWeather() {
   // Get all active weather events (where end_time is after current simulation time)
   const currentTime = getSimulationTime();
-  const weather = db.query(`
-    SELECT * FROM weather_events
-    WHERE end_time > ?
-    ORDER BY start_time ASC
-  `).all(currentTime);
-  
-  return weather;
+  const allWeather = store.getWeatherEvents();
+  return allWeather
+    .filter(w => w.end_time > currentTime)
+    .sort((a, b) => a.start_time.localeCompare(b.start_time));
 }
 

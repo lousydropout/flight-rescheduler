@@ -5,11 +5,12 @@ import { seedDatabase } from "./routes/seed";
 import { simulateWeather, getAllWeather } from "./routes/weather";
 import { safetyCheck } from "./routes/safety";
 import { rescheduleFlights } from "./routes/reschedule";
-import { getAllFlights, updateFlightStatuses } from "./routes/flights";
+import { getAllFlights, updateFlightStatuses, cleanupAndGenerateFlights } from "./routes/flights";
 import { getAllAlerts } from "./routes/alerts";
 import { getSimulationTime, fastForwardTime, advanceTimeByMinutes } from "./routes/time";
 import { cleanupSimulation } from "./routes/cleanup";
 import { getAllRoutesWithStatus } from "./routes/routes";
+import { getAvailableTimeSlots, updateFlightSchedule } from "./routes/calendar";
 
 const app = new Hono();
 
@@ -20,6 +21,8 @@ setInterval(() => {
     advanceTimeByMinutes(10);
     // Update flight statuses (scheduled -> in_progress) based on current simulation time
     updateFlightStatuses();
+    // Remove old completed flights and generate new scheduled flights
+    cleanupAndGenerateFlights();
   } catch (error) {
     console.error("Error in background process:", error);
   }
@@ -96,6 +99,42 @@ app.post("/time/fast-forward", (c) => {
 app.post("/cleanup", (c) => {
   const result = cleanupSimulation();
   return c.json(result);
+});
+
+app.get("/flights/:id/available-slots", async (c) => {
+  const flightId = parseInt(c.req.param("id"));
+  if (isNaN(flightId)) {
+    return c.json({ error: "Invalid flight ID" }, 400);
+  }
+  try {
+    const slots = getAvailableTimeSlots(flightId);
+    return c.json({ ok: true, slots });
+  } catch (error: any) {
+    return c.json({ error: error.message }, 400);
+  }
+});
+
+app.post("/flights/:id/reschedule", async (c) => {
+  const flightId = parseInt(c.req.param("id"));
+  if (isNaN(flightId)) {
+    return c.json({ error: "Invalid flight ID" }, 400);
+  }
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { start_time, end_time, instructor_id, plane_id } = body;
+    
+    if (!start_time || !end_time || !instructor_id || !plane_id) {
+      return c.json({ error: "Missing required fields: start_time, end_time, instructor_id, plane_id" }, 400);
+    }
+    
+    const result = updateFlightSchedule(flightId, start_time, end_time, instructor_id, plane_id);
+    if (!result.ok) {
+      return c.json({ error: result.message }, 400);
+    }
+    return c.json({ ok: true });
+  } catch (error: any) {
+    return c.json({ error: error.message }, 400);
+  }
 });
 
 export default {
