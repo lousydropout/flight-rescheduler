@@ -2,8 +2,20 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Cloud, Plane, AlertCircle, RefreshCw, Clock, RotateCcw, FastForward, X, Calendar } from 'lucide-react'
-
-const API = import.meta.env.VITE_API_BASE || 'http://localhost:3000';
+import {
+  getFlights,
+  getWeather,
+  getAlerts,
+  getTime,
+  getRoutes,
+  seedData,
+  simulateWeather,
+  fastForwardTime,
+  cleanup,
+  safetyCheck,
+  getAvailableSlots,
+  rescheduleFlight
+} from '@/lib/api'
 
 interface Flight {
   id: number;
@@ -60,11 +72,11 @@ function App() {
   const fetchData = async () => {
     try {
       const [flightsRes, weatherRes, alertsRes, timeRes, routesRes] = await Promise.all([
-        fetch(`${API}/flights`).then(r => r.json()),
-        fetch(`${API}/weather`).then(r => r.json()),
-        fetch(`${API}/alerts`).then(r => r.json()),
-        fetch(`${API}/time`).then(r => r.json()),
-        fetch(`${API}/routes`).then(r => r.json())
+        getFlights(),
+        getWeather(),
+        getAlerts(),
+        getTime(),
+        getRoutes()
       ]);
       setFlights(flightsRes);
       setWeather(weatherRes);
@@ -84,15 +96,10 @@ function App() {
     return () => clearInterval(id);
   }, []);
 
-  const handleAction = async (endpoint: string, actionName: string, body?: any) => {
+  const handleAction = async (actionName: string, actionFn: () => Promise<any>) => {
     setLoading(true);
     try {
-      const response = await fetch(`${API}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: body ? JSON.stringify(body) : undefined
-      });
-      const result = await response.json();
+      const result = await actionFn();
       console.log(`${actionName} result:`, result);
       // Refresh data after action
       setTimeout(fetchData, 500);
@@ -129,8 +136,7 @@ function App() {
     setSelectedFlightId(flightId);
     setLoadingSlots(true);
     try {
-      const response = await fetch(`${API}/flights/${flightId}/available-slots`);
-      const result = await response.json();
+      const result = await getAvailableSlots(flightId);
       if (result.ok && result.slots) {
         setAvailableSlots(result.slots);
       } else {
@@ -150,17 +156,12 @@ function App() {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API}/flights/${selectedFlightId}/reschedule`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          start_time: slot.start_time,
-          end_time: slot.end_time,
-          instructor_id: slot.instructor_id,
-          plane_id: slot.plane_id,
-        }),
+      const result = await rescheduleFlight(selectedFlightId, {
+        start_time: slot.start_time,
+        end_time: slot.end_time,
+        instructor_id: slot.instructor_id,
+        plane_id: slot.plane_id,
       });
-      const result = await response.json();
       if (result.ok) {
         setSelectedFlightId(null);
         setAvailableSlots([]);
@@ -244,11 +245,7 @@ function App() {
               onClick={async () => {
                 setLoading(true);
                 try {
-                  const response = await fetch(`${API}/time/fast-forward`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                  });
-                  const result = await response.json();
+                  const result = await fastForwardTime();
                   if (result.current_time) {
                     setSimulationTime(new Date(result.current_time));
                   }
@@ -269,7 +266,7 @@ function App() {
 
         <div className="flex flex-wrap gap-3 items-center">
           <Button
-            onClick={() => handleAction('/seed', 'Seed')}
+            onClick={() => handleAction('Seed', seedData)}
             disabled={loading}
             variant="default"
           >
@@ -283,12 +280,7 @@ function App() {
                 try {
                   // Use current simulation time
                   const startTime = simulationTime ? simulationTime.toISOString() : new Date().toISOString();
-                  const response = await fetch(`${API}/simulate-weather`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ condition: "storm", duration_hours: 3, start_time: startTime })
-                  });
-                  const result = await response.json();
+                  const result = await simulateWeather({ condition: "storm", duration_hours: 3, start_time: startTime });
                   console.log('Simulate Weather result:', result);
                   setTimeout(fetchData, 500);
                 } catch (error) {
@@ -312,12 +304,7 @@ function App() {
                   const startTime = simulationTime 
                     ? new Date(simulationTime.getTime() + 60 * 60 * 1000).toISOString()
                     : new Date(Date.now() + 60 * 60 * 1000).toISOString();
-                  const response = await fetch(`${API}/simulate-weather`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ condition: "storm", duration_hours: 3, start_time: startTime })
-                  });
-                  const result = await response.json();
+                  const result = await simulateWeather({ condition: "storm", duration_hours: 3, start_time: startTime });
                   console.log('Simulate Weather result:', result);
                   setTimeout(fetchData, 500);
                 } catch (error) {
@@ -341,12 +328,7 @@ function App() {
                   const startTime = simulationTime 
                     ? new Date(simulationTime.getTime() + 3 * 60 * 60 * 1000).toISOString()
                     : new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
-                  const response = await fetch(`${API}/simulate-weather`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ condition: "storm", duration_hours: 3, start_time: startTime })
-                  });
-                  const result = await response.json();
+                  const result = await simulateWeather({ condition: "storm", duration_hours: 3, start_time: startTime });
                   console.log('Simulate Weather result:', result);
                   setTimeout(fetchData, 500);
                 } catch (error) {
@@ -370,12 +352,7 @@ function App() {
                   const startTime = simulationTime 
                     ? new Date(simulationTime.getTime() + 24 * 60 * 60 * 1000).toISOString()
                     : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-                  const response = await fetch(`${API}/simulate-weather`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ condition: "storm", duration_hours: 3, start_time: startTime })
-                  });
-                  const result = await response.json();
+                  const result = await simulateWeather({ condition: "storm", duration_hours: 3, start_time: startTime });
                   console.log('Simulate Weather result:', result);
                   setTimeout(fetchData, 500);
                 } catch (error) {
@@ -393,7 +370,7 @@ function App() {
             </Button>
           </div>
           <Button
-            onClick={() => handleAction('/safety-check', 'Safety Check')}
+            onClick={() => handleAction('Safety Check', safetyCheck)}
             disabled={loading || flights.length === 0}
             variant="destructive"
             title={flights.length === 0 ? "No flights to check" : "Check for flights affected by weather"}
@@ -402,7 +379,7 @@ function App() {
             {loading ? 'Checking...' : 'Safety Check'}
           </Button>
           <Button
-            onClick={() => handleAction('/cleanup', 'Reset Simulation')}
+            onClick={() => handleAction('Reset Simulation', cleanup)}
             disabled={loading}
             variant="outline"
             className="border-orange-300 text-orange-700 hover:bg-orange-50"
