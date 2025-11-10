@@ -132,7 +132,7 @@ function updateFlightStatuses(currentTime: Date) {
 }
 
 // Helper to generate time slots
-function generateTimeSlots(flightId: number): TimeSlot[] {
+function generateTimeSlots(_flightId: number): TimeSlot[] {
   const slots: TimeSlot[] = [];
   const now = new Date(mockSimulationTime);
   now.setHours(now.getHours() + 1, 0, 0, 0); // Start from next hour

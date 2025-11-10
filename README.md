@@ -120,3 +120,4 @@ The frontend communicates with the backend via REST API:
 - Modal state managed with React hooks
 - Responsive design with Tailwind CSS grid and flexbox
 - Error handling via try/catch and user alerts
+
