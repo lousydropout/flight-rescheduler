@@ -16,3 +16,14 @@ export function simulateWeather() {
   return { ok: true };
 }
 
+export function getAllWeather() {
+  // Get all active weather events (where end_time is in the future)
+  const weather = db.query(`
+    SELECT * FROM weather_events
+    WHERE end_time > datetime('now')
+    ORDER BY start_time ASC
+  `).all();
+  
+  return weather;
+}
+
