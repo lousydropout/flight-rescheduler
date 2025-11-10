@@ -28,8 +28,11 @@ app.post("/seed", (c) => {
   return c.json({ ok: true, ...result });
 });
 
-app.post("/simulate-weather", (c) => {
-  const result = simulateWeather();
+app.post("/simulate-weather", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const condition = body.condition || "storm";
+  const durationHours = body.duration_hours || 3;
+  const result = simulateWeather(condition, durationHours);
   return c.json(result);
 });
 

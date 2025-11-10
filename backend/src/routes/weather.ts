@@ -1,19 +1,32 @@
 import { db } from "../db";
 
-export function simulateWeather() {
+const AVAILABLE_ROUTES = ["KAUS–KGTU", "KAUS–KHYI", "KAUS–KEDC", "KAUS–KATT"];
+
+export function simulateWeather(condition: string = "storm", durationHours: number = 3) {
+  // Randomly select 2-3 routes
+  const numRoutes = Math.floor(Math.random() * 2) + 2; // 2 or 3 routes
+  const shuffled = [...AVAILABLE_ROUTES].sort(() => Math.random() - 0.5);
+  const selectedRoutes = shuffled.slice(0, numRoutes);
+  const affectedRoutes = selectedRoutes.join(", ");
+
+  // Calculate end time based on duration
+  const startTime = new Date();
+  const endTime = new Date(startTime.getTime() + durationHours * 60 * 60 * 1000);
+
   // Insert weather event
   db.run(
-    "INSERT INTO weather_events(start_time, end_time, affected_routes, condition) VALUES (datetime('now'), datetime('now','+3 hours'), ?, ?)",
-    ["KAUS–KHYI", "storm"]
+    "INSERT INTO weather_events(start_time, end_time, affected_routes, condition) VALUES (?, ?, ?, ?)",
+    [startTime.toISOString(), endTime.toISOString(), affectedRoutes, condition]
   );
 
-  // Create alert
+  // Create detailed alert
+  const alertMessage = `Simulated ${condition} (${durationHours}h) affecting ${affectedRoutes}`;
   db.run(
     "INSERT INTO alerts(timestamp, message) VALUES (datetime('now'), ?)",
-    ["Simulated storm at KAUS–KHYI"]
+    [alertMessage]
   );
 
-  return { ok: true };
+  return { ok: true, condition, duration_hours: durationHours, affected_routes: affectedRoutes };
 }
 
 export function getAllWeather() {
