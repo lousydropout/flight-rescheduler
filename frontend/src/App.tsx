@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Cloud, Plane, AlertCircle, RefreshCw, Clock } from 'lucide-react'
+import { Cloud, Plane, AlertCircle, RefreshCw, Clock, RotateCcw, FastForward } from 'lucide-react'
 
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:3000';
 
@@ -30,24 +30,34 @@ interface Alert {
   message: string;
 }
 
+interface RouteStatus {
+  route: string;
+  status: "clear" | "unsafe";
+  weather_event: WeatherEvent | null;
+}
+
 function App() {
   const [flights, setFlights] = useState<Flight[]>([]);
   const [weather, setWeather] = useState<WeatherEvent[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [routes, setRoutes] = useState<RouteStatus[]>([]);
   const [loading, setLoading] = useState(false);
   const [simulationTime, setSimulationTime] = useState<Date | null>(null);
+  const [stormStartTime, setStormStartTime] = useState<string>('');
 
   const fetchData = async () => {
     try {
-      const [flightsRes, weatherRes, alertsRes, timeRes] = await Promise.all([
+      const [flightsRes, weatherRes, alertsRes, timeRes, routesRes] = await Promise.all([
         fetch(`${API}/flights`).then(r => r.json()),
         fetch(`${API}/weather`).then(r => r.json()),
         fetch(`${API}/alerts`).then(r => r.json()),
-        fetch(`${API}/time`).then(r => r.json())
+        fetch(`${API}/time`).then(r => r.json()),
+        fetch(`${API}/routes`).then(r => r.json())
       ]);
       setFlights(flightsRes);
       setWeather(weatherRes);
       setAlerts(alertsRes);
+      setRoutes(routesRes);
       if (timeRes.current_time) {
         setSimulationTime(new Date(timeRes.current_time));
       }
@@ -62,12 +72,13 @@ function App() {
     return () => clearInterval(id);
   }, []);
 
-  const handleAction = async (endpoint: string, actionName: string) => {
+  const handleAction = async (endpoint: string, actionName: string, body?: any) => {
     setLoading(true);
     try {
       const response = await fetch(`${API}${endpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined
       });
       const result = await response.json();
       console.log(`${actionName} result:`, result);
@@ -145,43 +156,148 @@ function App() {
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  const response = await fetch(`${API}/time/fast-forward`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                  });
+                  const result = await response.json();
+                  if (result.current_time) {
+                    setSimulationTime(new Date(result.current_time));
+                  }
+                  setTimeout(fetchData, 500);
+                } catch (error) {
+                  console.error('Error fast forwarding:', error);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              disabled={loading}
+              title="Fast forward to next hour"
+            >
+              <FastForward className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3 items-center">
           <Button
             onClick={() => handleAction('/seed', 'Seed')}
             disabled={loading}
             variant="default"
           >
-            <Plane className="mr-2 h-4 w-4" />
-            Seed Data
+            <Plane className={`mr-2 h-4 w-4 ${loading ? 'animate-pulse' : ''}`} />
+            {loading ? 'Processing...' : 'Seed Data'}
           </Button>
-          <Button
-            onClick={() => handleAction('/simulate-weather', 'Simulate Weather')}
-            disabled={loading}
-            variant="secondary"
-          >
-            <Cloud className="mr-2 h-4 w-4" />
-            Simulate Weather
-          </Button>
+          <div className="flex items-center gap-2">
+            <input
+              type="datetime-local"
+              value={stormStartTime}
+              onChange={(e) => setStormStartTime(e.target.value)}
+              className="px-3 py-2 border rounded-md text-sm"
+              placeholder="Optional: Storm start time"
+            />
+            <Button
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  const body: any = { condition: "storm", duration_hours: 3 };
+                  if (stormStartTime) {
+                    // Convert datetime-local to ISO string
+                    const date = new Date(stormStartTime);
+                    body.start_time = date.toISOString();
+                  }
+                  const response = await fetch(`${API}/simulate-weather`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                  });
+                  const result = await response.json();
+                  console.log('Simulate Weather result:', result);
+                  setStormStartTime(''); // Clear after use
+                  setTimeout(fetchData, 500);
+                } catch (error) {
+                  console.error('Error simulating weather:', error);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              disabled={loading}
+              variant="secondary"
+            >
+              <Cloud className="mr-2 h-4 w-4" />
+              Simulate Weather
+            </Button>
+          </div>
           <Button
             onClick={() => handleAction('/safety-check', 'Safety Check')}
-            disabled={loading}
+            disabled={loading || flights.length === 0}
             variant="destructive"
+            title={flights.length === 0 ? "No flights to check" : "Check for flights affected by weather"}
           >
-            <AlertCircle className="mr-2 h-4 w-4" />
-            Safety Check
+            <AlertCircle className={`mr-2 h-4 w-4 ${loading ? 'animate-pulse' : ''}`} />
+            {loading ? 'Checking...' : 'Safety Check'}
           </Button>
           <Button
             onClick={() => handleAction('/reschedule', 'Reschedule')}
+            disabled={loading || flights.filter(f => f.status === 'cancelled').length === 0}
+            variant="outline"
+            title={flights.filter(f => f.status === 'cancelled').length === 0 ? "No cancelled flights to reschedule" : "Reschedule cancelled flights"}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Rescheduling...' : 'Reschedule'}
+          </Button>
+          <Button
+            onClick={() => handleAction('/cleanup', 'Reset Simulation')}
             disabled={loading}
             variant="outline"
+            className="border-orange-300 text-orange-700 hover:bg-orange-50"
           >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Reschedule
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Reset Simulation
           </Button>
         </div>
+
+        {/* Routes Visualization */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Plane className="h-5 w-5" />
+              Route Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-3">
+              {routes.map((route) => (
+                <div
+                  key={route.route}
+                  className={`px-4 py-2 rounded-lg border font-mono text-sm font-semibold ${
+                    route.status === "clear"
+                      ? "bg-green-50 border-green-300 text-green-800"
+                      : "bg-red-50 border-red-300 text-red-800"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${
+                      route.status === "clear" ? "bg-green-500" : "bg-red-500"
+                    }`} />
+                    <span>{route.route.replace("–", " → ")}</span>
+                    {route.weather_event && (
+                      <span className="text-xs font-normal">
+                        ({route.weather_event.condition})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">

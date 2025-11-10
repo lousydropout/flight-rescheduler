@@ -1,4 +1,5 @@
 import { db } from "../db";
+import { getSimulationTime } from "./time";
 
 interface CancelledFlight {
   id: number;
@@ -175,14 +176,15 @@ export function rescheduleFlights() {
   }
 
   // Get latest weather event end_time to know when it's safe to reschedule
+  const currentTime = getSimulationTime();
   const latestWeather = db.query(`
     SELECT MAX(end_time) as max_end_time
     FROM weather_events
-    WHERE end_time > datetime('now')
-  `).get() as { max_end_time: string | null };
+    WHERE end_time > ?
+  `).get(currentTime) as { max_end_time: string | null };
 
-  // Determine earliest start time (max of weather end_time or current time)
-  const now = new Date();
+  // Determine earliest start time (max of weather end_time or current simulation time)
+  const now = new Date(currentTime);
   let earliestStart = now;
   
   if (latestWeather.max_end_time) {

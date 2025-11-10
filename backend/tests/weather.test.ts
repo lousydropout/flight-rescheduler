@@ -4,15 +4,15 @@ import { Database } from "bun:sqlite";
 const AVAILABLE_ROUTES = ["KAUS–KGTU", "KAUS–KHYI", "KAUS–KEDC", "KAUS–KATT"];
 
 // Test function that mirrors the actual simulateWeather implementation
-function simulateWeatherTest(db: Database, condition: string = "storm", durationHours: number = 3) {
+function simulateWeatherTest(db: Database, condition: string = "storm", durationHours: number = 3, startTimeParam?: string) {
   // Randomly select 2-3 routes
   const numRoutes = Math.floor(Math.random() * 2) + 2; // 2 or 3 routes
   const shuffled = [...AVAILABLE_ROUTES].sort(() => Math.random() - 0.5);
   const selectedRoutes = shuffled.slice(0, numRoutes);
   const affectedRoutes = selectedRoutes.join(", ");
 
-  // Calculate end time based on duration
-  const startTime = new Date();
+  // Use provided start_time or current time
+  const startTime = startTimeParam ? new Date(startTimeParam) : new Date();
   const endTime = new Date(startTime.getTime() + durationHours * 60 * 60 * 1000);
 
   // Insert weather event
@@ -114,6 +114,37 @@ describe("Weather Simulation", () => {
       count: number;
     };
     expect(events.count).toBe(2);
+  });
+
+  it("should accept custom start_time parameter", () => {
+    const customStartTime = "2025-11-10T15:00:00.000Z";
+    const durationHours = 2;
+    const result = simulateWeatherTest(db, "storm", durationHours, customStartTime);
+    
+    const event = db.query("SELECT start_time, end_time FROM weather_events ORDER BY id DESC LIMIT 1").get() as {
+      start_time: string;
+      end_time: string;
+    };
+    
+    expect(event.start_time).toBe(customStartTime);
+    const start = new Date(event.start_time);
+    const end = new Date(event.end_time);
+    const actualDurationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+    expect(actualDurationHours).toBe(durationHours);
+  });
+
+  it("should use current time when start_time not provided", () => {
+    const before = new Date();
+    simulateWeatherTest(db, "storm", 3);
+    const after = new Date();
+    
+    const event = db.query("SELECT start_time FROM weather_events ORDER BY id DESC LIMIT 1").get() as {
+      start_time: string;
+    };
+    
+    const eventTime = new Date(event.start_time);
+    expect(eventTime.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(eventTime.getTime()).toBeLessThanOrEqual(after.getTime());
   });
 });
 

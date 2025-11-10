@@ -7,7 +7,9 @@ import { safetyCheck } from "./routes/safety";
 import { rescheduleFlights } from "./routes/reschedule";
 import { getAllFlights } from "./routes/flights";
 import { getAllAlerts } from "./routes/alerts";
-import { getSimulationTime } from "./routes/time";
+import { getSimulationTime, fastForwardTime } from "./routes/time";
+import { cleanupSimulation } from "./routes/cleanup";
+import { getAllRoutesWithStatus } from "./routes/routes";
 
 const app = new Hono();
 
@@ -32,7 +34,8 @@ app.post("/simulate-weather", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const condition = body.condition || "storm";
   const durationHours = body.duration_hours || 3;
-  const result = simulateWeather(condition, durationHours);
+  const startTime = body.start_time; // Optional ISO string
+  const result = simulateWeather(condition, durationHours, startTime);
   return c.json(result);
 });
 
@@ -61,9 +64,24 @@ app.get("/alerts", (c) => {
   return c.json(alerts);
 });
 
+app.get("/routes", (c) => {
+  const routes = getAllRoutesWithStatus();
+  return c.json(routes);
+});
+
 app.get("/time", (c) => {
   const time = getSimulationTime();
   return c.json({ current_time: time });
+});
+
+app.post("/time/fast-forward", (c) => {
+  const newTime = fastForwardTime();
+  return c.json({ current_time: newTime });
+});
+
+app.post("/cleanup", (c) => {
+  const result = cleanupSimulation();
+  return c.json(result);
 });
 
 export default {

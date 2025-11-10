@@ -60,5 +60,13 @@ export function initSchema() {
       message TEXT
     )
   `);
+
+  // Simulation settings table for storing simulation time
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS simulation_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    )
+  `);
 }
 

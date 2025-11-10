@@ -1,12 +1,14 @@
 import { db } from "../db";
+import { getSimulationTime } from "./time";
 
 export function safetyCheck() {
-  // Get all active weather events
+  // Get all active weather events (using simulation time)
+  const currentTime = getSimulationTime();
   const weatherEvents = db.query(`
     SELECT * FROM weather_events
-    WHERE end_time > datetime('now')
+    WHERE end_time > ?
     ORDER BY start_time ASC
-  `).all() as Array<{
+  `).all(currentTime) as Array<{
     id: number;
     start_time: string;
     end_time: string;

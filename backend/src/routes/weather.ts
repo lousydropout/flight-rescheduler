@@ -1,16 +1,17 @@
 import { db } from "../db";
+import { getSimulationTime } from "./time";
 
 const AVAILABLE_ROUTES = ["KAUS–KGTU", "KAUS–KHYI", "KAUS–KEDC", "KAUS–KATT"];
 
-export function simulateWeather(condition: string = "storm", durationHours: number = 3) {
+export function simulateWeather(condition: string = "storm", durationHours: number = 3, startTimeParam?: string) {
   // Randomly select 2-3 routes
   const numRoutes = Math.floor(Math.random() * 2) + 2; // 2 or 3 routes
   const shuffled = [...AVAILABLE_ROUTES].sort(() => Math.random() - 0.5);
   const selectedRoutes = shuffled.slice(0, numRoutes);
   const affectedRoutes = selectedRoutes.join(", ");
 
-  // Calculate end time based on duration
-  const startTime = new Date();
+  // Use provided start_time or current time
+  const startTime = startTimeParam ? new Date(startTimeParam) : new Date();
   const endTime = new Date(startTime.getTime() + durationHours * 60 * 60 * 1000);
 
   // Insert weather event
@@ -30,12 +31,13 @@ export function simulateWeather(condition: string = "storm", durationHours: numb
 }
 
 export function getAllWeather() {
-  // Get all active weather events (where end_time is in the future)
+  // Get all active weather events (where end_time is after current simulation time)
+  const currentTime = getSimulationTime();
   const weather = db.query(`
     SELECT * FROM weather_events
-    WHERE end_time > datetime('now')
+    WHERE end_time > ?
     ORDER BY start_time ASC
-  `).all();
+  `).all(currentTime);
   
   return weather;
 }
