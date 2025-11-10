@@ -2,7 +2,7 @@
 
 Last Updated: 2025-11-10
 
-## Current Phase: Phase 4 Complete ✅
+## Current Phase: Phase 6 Complete ✅
 
 ## Completed Phases
 
@@ -54,19 +54,38 @@ Last Updated: 2025-11-10
 - Modern UI with Tailwind CSS and shadcn/ui components
 - Test coverage for GET endpoints (11 new tests)
 
+### Phase 5: Wire True Logic ✅
+- Real weather targeting: randomly selects 2-3 routes, accepts condition/duration parameters
+- Route-specific safety checks: only cancels flights matching affected routes and time overlap
+- Intelligent rescheduling: checks instructor/plane availability, respects preferred time windows
+- Enhanced alert messages with detailed information
+- Test coverage: 19 new/updated tests
+
+### Phase 6: Polish Simulation ✅
+- Cleanup/reset route (`POST /cleanup`) to restore simulation state
+- Fast forward button to advance simulation time by 1 hour (`POST /time/fast-forward`)
+- Custom storm timing with datetime picker (optional `start_time` parameter)
+- Route visualization with color-coded weather status (green=clear, red=unsafe)
+- Enhanced UI/UX: better loading states, button feedback, tooltips
+- Simulation time integration: all time-based operations use stored simulation time
+- Test coverage: 25 new tests (cleanup, time control, routes, custom storm timing)
+
 ## Current Test Status
 
-- **Total Tests:** 54 passing
-- **Test Files:** 10 files
+- **Total Tests:** 81 passing
+- **Test Files:** 13 files
 - **Coverage:**
   - Database operations
   - Schema validation
   - Seed functionality
-  - Weather simulation
+  - Weather simulation (including custom timing)
   - Safety checks
   - Rescheduling
   - GET endpoints
   - Full simulation loop integration
+  - Cleanup/reset functionality
+  - Simulation time control (fast forward)
+  - Route status with weather
 
 ## Known Issues / Fixes Applied
 
@@ -77,21 +96,22 @@ Last Updated: 2025-11-10
    - Now fetches simulation time from backend via `GET /time`
    - Updates every 3 seconds with other data
 
-## Next Steps (Phase 5+)
+3. ⚠️ **Known Issue:** Flights table Time column may show original time instead of rescheduled time
+   - Backend correctly updates `start_time` and `end_time` when rescheduling
+   - Alerts correctly show new rescheduled time
+   - Frontend may need to refresh or there may be a display issue
+   - Workaround: Check alerts section for actual rescheduled times
 
-### Phase 5: Wire True Logic
-- Real weather targeting (route-specific, time-overlap checking)
-- Real rescheduling (availability checks, preferred time matching)
-- Resource conflict prevention
-
-### Phase 6: Polish Simulation
-- Auto-refresh optimization
-- Reset/cleanup route
-- Enhanced UI/UX
+## Next Steps (Phase 7+)
 
 ### Phase 7: Optional AI Layer
 - GPT ranking for reschedules
 - AI reasoning for reschedule suggestions
+
+### Bug Fixes / Improvements
+- Fix Time column display issue for rescheduled flights
+- Consider adding rescheduled time as separate column or highlight
+- Add visual indicators for time changes
 
 ## Technical Stack
 
@@ -129,11 +149,13 @@ rescheduler/
 │   │       ├── reschedule.ts
 │   │       ├── flights.ts
 │   │       ├── alerts.ts
-│   │       └── time.ts
-│   └── tests/                # 10 test files, 54 tests
+│   │       ├── time.ts
+│   │       ├── cleanup.ts
+│   │       └── routes.ts
+│   └── tests/                # 13 test files, 81 tests
 └── frontend/
     ├── src/
-    │   ├── App.tsx           # Main dashboard
+    │   ├── App.tsx           # Main dashboard with route visualization
     │   ├── components/ui/   # shadcn/ui components
     │   └── lib/utils.ts      # Utility functions
     └── tailwind.config.js    # Tailwind configuration
@@ -147,12 +169,15 @@ rescheduler/
 - `GET /weather` - Active weather events
 - `GET /alerts` - Latest 50 alerts
 - `GET /time` - Simulation time
+- `GET /routes` - All routes with weather status (clear/unsafe)
 
 ### POST Endpoints
 - `POST /seed` - Seed database
-- `POST /simulate-weather` - Create weather event
+- `POST /simulate-weather` - Create weather event (optional: `start_time`, `condition`, `duration_hours`)
 - `POST /safety-check` - Cancel flights
 - `POST /reschedule` - Reschedule cancelled flights
+- `POST /cleanup` - Reset simulation (clear weather, restore flights to scheduled)
+- `POST /time/fast-forward` - Advance simulation time by 1 hour
 
 ## Running the Project
 

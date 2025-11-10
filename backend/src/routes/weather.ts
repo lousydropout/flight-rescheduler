@@ -10,8 +10,9 @@ export function simulateWeather(condition: string = "storm", durationHours: numb
   const selectedRoutes = shuffled.slice(0, numRoutes);
   const affectedRoutes = selectedRoutes.join(", ");
 
-  // Use provided start_time or current time
-  const startTime = startTimeParam ? new Date(startTimeParam) : new Date();
+  // Use provided start_time or current simulation time
+  const currentSimTime = getSimulationTime();
+  const startTime = startTimeParam ? new Date(startTimeParam) : new Date(currentSimTime);
   const endTime = new Date(startTime.getTime() + durationHours * 60 * 60 * 1000);
 
   // Insert weather event
@@ -20,11 +21,11 @@ export function simulateWeather(condition: string = "storm", durationHours: numb
     [startTime.toISOString(), endTime.toISOString(), affectedRoutes, condition]
   );
 
-  // Create detailed alert
+  // Create detailed alert using simulation time
   const alertMessage = `Simulated ${condition} (${durationHours}h) affecting ${affectedRoutes}`;
   db.run(
-    "INSERT INTO alerts(timestamp, message) VALUES (datetime('now'), ?)",
-    [alertMessage]
+    "INSERT INTO alerts(timestamp, message) VALUES (?, ?)",
+    [currentSimTime, alertMessage]
   );
 
   return { ok: true, condition, duration_hours: durationHours, affected_routes: affectedRoutes };

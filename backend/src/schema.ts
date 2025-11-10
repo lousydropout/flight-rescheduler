@@ -68,5 +68,26 @@ export function initSchema() {
       value TEXT
     )
   `);
+
+  // Simulation time table - stores only the current simulation time
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS simulation_time (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      current_time TEXT NOT NULL
+    )
+  `);
+
+  // Initialize simulation time if it doesn't exist
+  // Use SELECT * to avoid SQLite date/time interpretation issues when selecting specific columns
+  const existingTimeResults = db.query("SELECT * FROM simulation_time WHERE id = 1").all() as {
+    id: number;
+    current_time: string;
+  }[];
+  const existingTime = existingTimeResults[0] || null;
+
+  if (!existingTime) {
+    const now = new Date().toISOString();
+    db.run("INSERT INTO simulation_time (id, current_time) VALUES (1, ?)", [now]);
+  }
 }
 

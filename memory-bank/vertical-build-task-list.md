@@ -339,17 +339,24 @@ Everything loops cleanly without any external dependencies.
 - ✅ Phase 2: Schema + Seeding
 - ✅ Phase 3: First Simulation Loop
 - ✅ Phase 4: Frontend (with Tailwind CSS, shadcn/ui, simulation clock)
+- ✅ Phase 5: Wire True Logic (route-specific weather, availability checks, preferred time matching)
+- ✅ Phase 6: Polish Simulation (cleanup, fast forward, custom storm timing, route visualization)
 
 **Current Status:**
-- 54 tests passing
+- 81 tests passing
 - Full simulation loop working
 - Modern dashboard with real-time updates
-- Simulation clock showing backend time
+- Simulation clock with fast forward control
+- Route visualization with color-coded weather status
+- Custom storm timing support
+- Reset/cleanup functionality
+
+**Known Issues:**
+- Time column may show original time instead of rescheduled time (check alerts for actual times)
 
 **Next:**
-- Phase 5: Wire True Logic (route-specific weather, availability checks)
-- Phase 6: Polish Simulation
 - Phase 7: Optional AI Layer
+- Bug fixes: Time column display for rescheduled flights
 
 ---
 

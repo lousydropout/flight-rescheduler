@@ -3,20 +3,42 @@ import { Database } from "bun:sqlite";
 
 // Test functions that mirror the actual time implementation
 function getSimulationTimeTest(db: Database) {
-  // Get stored simulation time if available, otherwise use current time
-  const setting = db.query("SELECT value FROM simulation_settings WHERE key = ?").get("simulation_time") as {
-    value: string;
-  } | null;
+  // Get stored simulation time from dedicated table
+  // Use SELECT * to avoid SQLite date/time interpretation issues when selecting specific columns
+  const results = db.query("SELECT * FROM simulation_time WHERE id = 1").all() as {
+    id: number;
+    current_time: string;
+  }[];
+  const result = results[0] || null;
 
-  if (setting && setting.value) {
-    return setting.value;
+  if (result && result.current_time) {
+    return result.current_time;
   }
 
-  // Default to current time
-  const result = db.query("SELECT datetime('now') as current_time").get() as {
-    current_time: string;
-  };
-  return result.current_time;
+  // Fallback: initialize with current time if table is empty
+  const now = new Date().toISOString();
+  db.run("INSERT OR REPLACE INTO simulation_time (id, current_time) VALUES (1, ?)", [now]);
+  return now;
+}
+
+function advanceTimeByMinutesTest(db: Database, minutes: number) {
+  // Get current simulation time
+  const currentTime = getSimulationTimeTest(db);
+  const currentDate = new Date(currentTime);
+
+  // Advance by specified minutes
+  const newDate = new Date(currentDate);
+  newDate.setMinutes(newDate.getMinutes() + minutes);
+
+  const newTime = newDate.toISOString();
+
+  // Update the simulation time in the database
+  db.run(
+    "UPDATE simulation_time SET current_time = ? WHERE id = 1",
+    [newTime]
+  );
+
+  return newTime;
 }
 
 function fastForwardTimeTest(db: Database) {
@@ -34,10 +56,10 @@ function fastForwardTimeTest(db: Database) {
 
   const newTime = fastForwardedDate.toISOString();
 
-  // Store the new simulation time
+  // Update the simulation time in the database
   db.run(
-    "INSERT OR REPLACE INTO simulation_settings (key, value) VALUES (?, ?)",
-    ["simulation_time", newTime]
+    "UPDATE simulation_time SET current_time = ? WHERE id = 1",
+    [newTime]
   );
 
   return newTime;
@@ -49,9 +71,9 @@ describe("Simulation Time Control", () => {
   beforeEach(() => {
     db = new Database(":memory:");
     db.exec(`
-      CREATE TABLE IF NOT EXISTS simulation_settings (
-        key TEXT PRIMARY KEY,
-        value TEXT
+      CREATE TABLE IF NOT EXISTS simulation_time (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        current_time TEXT NOT NULL
       )
     `);
   });
@@ -64,20 +86,51 @@ describe("Simulation Time Control", () => {
 
   it("should return stored simulation time when set", () => {
     const storedTime = "2025-11-10T14:30:00.000Z";
+    // First ensure the row exists
+    db.run("DELETE FROM simulation_time");
     db.run(
-      "INSERT OR REPLACE INTO simulation_settings (key, value) VALUES (?, ?)",
-      ["simulation_time", storedTime]
+      "INSERT INTO simulation_time (id, current_time) VALUES (1, ?)",
+      [storedTime]
     );
 
     const time = getSimulationTimeTest(db);
     expect(time).toBe(storedTime);
   });
 
+  it("should advance time by specified minutes", () => {
+    const startTime = "2025-11-10T14:00:00.000Z";
+    db.run(
+      "INSERT OR REPLACE INTO simulation_time (id, current_time) VALUES (1, ?)",
+      [startTime]
+    );
+
+    const newTime = advanceTimeByMinutesTest(db, 10);
+    const newDate = new Date(newTime);
+    const startDate = new Date(startTime);
+    
+    expect(newDate.getMinutes()).toBe(startDate.getMinutes() + 10);
+  });
+
+  it("should advance time by 10 minutes (background process simulation)", () => {
+    const startTime = "2025-11-10T14:00:00.000Z";
+    db.run(
+      "INSERT OR REPLACE INTO simulation_time (id, current_time) VALUES (1, ?)",
+      [startTime]
+    );
+
+    // Simulate background process advancing by 10 minutes
+    const newTime = advanceTimeByMinutesTest(db, 10);
+    const newDate = new Date(newTime);
+    
+    expect(newDate.getMinutes()).toBe(10);
+    expect(newDate.getHours()).toBe(14);
+  });
+
   it("should fast forward to next hour from current time", () => {
     const startTime = "2025-11-10T14:01:00.000Z";
     db.run(
-      "INSERT OR REPLACE INTO simulation_settings (key, value) VALUES (?, ?)",
-      ["simulation_time", startTime]
+      "INSERT OR REPLACE INTO simulation_time (id, current_time) VALUES (1, ?)",
+      [startTime]
     );
 
     const newTime = fastForwardTimeTest(db);
@@ -91,8 +144,8 @@ describe("Simulation Time Control", () => {
   it("should fast forward correctly from half hour", () => {
     const startTime = "2025-11-10T14:30:00.000Z";
     db.run(
-      "INSERT OR REPLACE INTO simulation_settings (key, value) VALUES (?, ?)",
-      ["simulation_time", startTime]
+      "INSERT OR REPLACE INTO simulation_time (id, current_time) VALUES (1, ?)",
+      [startTime]
     );
 
     const newTime = fastForwardTimeTest(db);
@@ -105,8 +158,8 @@ describe("Simulation Time Control", () => {
   it("should handle hour rollover (23:00 -> 00:00 next day)", () => {
     const startTime = "2025-11-10T23:15:00.000Z";
     db.run(
-      "INSERT OR REPLACE INTO simulation_settings (key, value) VALUES (?, ?)",
-      ["simulation_time", startTime]
+      "INSERT OR REPLACE INTO simulation_time (id, current_time) VALUES (1, ?)",
+      [startTime]
     );
 
     const newTime = fastForwardTimeTest(db);
@@ -119,24 +172,26 @@ describe("Simulation Time Control", () => {
   it("should update stored simulation time after fast forward", () => {
     const startTime = "2025-11-10T10:00:00.000Z";
     db.run(
-      "INSERT OR REPLACE INTO simulation_settings (key, value) VALUES (?, ?)",
-      ["simulation_time", startTime]
+      "INSERT OR REPLACE INTO simulation_time (id, current_time) VALUES (1, ?)",
+      [startTime]
     );
 
     const newTime = fastForwardTimeTest(db);
-    const stored = db.query("SELECT value FROM simulation_settings WHERE key = ?").get("simulation_time") as {
-      value: string;
-    };
+    const storedResults = db.query("SELECT * FROM simulation_time WHERE id = 1").all() as {
+      id: number;
+      current_time: string;
+    }[];
+    const stored = storedResults[0];
 
-    expect(stored.value).toBe(newTime);
+    expect(stored.current_time).toBe(newTime);
     expect(newTime).not.toBe(startTime);
   });
 
   it("should be chainable (can fast forward multiple times)", () => {
     const startTime = "2025-11-10T10:00:00.000Z";
     db.run(
-      "INSERT OR REPLACE INTO simulation_settings (key, value) VALUES (?, ?)",
-      ["simulation_time", startTime]
+      "INSERT OR REPLACE INTO simulation_time (id, current_time) VALUES (1, ?)",
+      [startTime]
     );
 
     const time1 = fastForwardTimeTest(db);

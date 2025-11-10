@@ -100,6 +100,10 @@ function App() {
     switch (status) {
       case 'scheduled':
         return 'text-green-600 bg-green-50 border-green-200';
+      case 'in_progress':
+        return 'text-blue-600 bg-blue-50 border-blue-200';
+      case 'completed':
+        return 'text-purple-600 bg-purple-50 border-purple-200';
       case 'cancelled':
         return 'text-red-600 bg-red-50 border-red-200';
       case 'rescheduled':

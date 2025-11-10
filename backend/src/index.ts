@@ -5,13 +5,25 @@ import { seedDatabase } from "./routes/seed";
 import { simulateWeather, getAllWeather } from "./routes/weather";
 import { safetyCheck } from "./routes/safety";
 import { rescheduleFlights } from "./routes/reschedule";
-import { getAllFlights } from "./routes/flights";
+import { getAllFlights, updateFlightStatuses } from "./routes/flights";
 import { getAllAlerts } from "./routes/alerts";
-import { getSimulationTime, fastForwardTime } from "./routes/time";
+import { getSimulationTime, fastForwardTime, advanceTimeByMinutes } from "./routes/time";
 import { cleanupSimulation } from "./routes/cleanup";
 import { getAllRoutesWithStatus } from "./routes/routes";
 
 const app = new Hono();
+
+// Background process: advance simulation time by 10 minutes every 10 seconds
+// and update flight statuses based on simulation time
+setInterval(() => {
+  try {
+    advanceTimeByMinutes(10);
+    // Update flight statuses (scheduled -> in_progress) based on current simulation time
+    updateFlightStatuses();
+  } catch (error) {
+    console.error("Error in background process:", error);
+  }
+}, 10000); // 10 seconds
 
 // Enable CORS for frontend
 app.use("*", cors());
@@ -76,6 +88,8 @@ app.get("/time", (c) => {
 
 app.post("/time/fast-forward", (c) => {
   const newTime = fastForwardTime();
+  // Update flight statuses after fast forwarding
+  updateFlightStatuses();
   return c.json({ current_time: newTime });
 });
 
